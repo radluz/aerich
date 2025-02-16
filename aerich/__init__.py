@@ -1,7 +1,7 @@
+import asyncio
 import os
-from asyncio import WindowsSelectorEventLoopPolicy, set_event_loop_policy
+import platform
 from pathlib import Path
-from sys import platform
 from typing import List
 
 from tortoise import Tortoise, generate_schema_for_client
@@ -23,8 +23,9 @@ from aerich.utils import (
     write_version_file,
 )
 
-if platform == "win32":
-    set_event_loop_policy(WindowsSelectorEventLoopPolicy())
+if platform.system() == "Windows":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 
 class Command:
     def __init__(
