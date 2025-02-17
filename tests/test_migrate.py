@@ -1,13 +1,31 @@
+from __future__ import annotations
+
+from pathlib import Path
+
 import pytest
+import tortoise
 from pytest_mock import MockerFixture
+from tortoise.indexes import Index
 
 from aerich.ddl.mysql import MysqlDDL
 from aerich.ddl.postgres import PostgresDDL
 from aerich.ddl.sqlite import SqliteDDL
 from aerich.exceptions import NotSupportError
-from aerich.migrate import Migrate
+from aerich.migrate import MIGRATE_TEMPLATE, Migrate
 from aerich.utils import get_models_describe
+from tests.indexes import CustomIndex
 
+
+def describe_index(idx: Index) -> Index | dict:
+    # tortoise-orm>=0.24 changes Index desribe to be dict
+    if tortoise.__version__ < "0.24":
+        return idx
+    return idx.describe()  # type:ignore
+
+
+# tortoise-orm>=0.21 changes IntField constraints
+# from {"ge": 1, "le": 2147483647} to {"ge": -2147483648, "le": 2147483647}
+MIN_INT = 1 if tortoise.__version__ < "0.21" else -2147483648
 old_models_describe = {
     "models.Category": {
         "name": "models.Category",
@@ -17,7 +35,7 @@ old_models_describe = {
         "description": None,
         "docstring": None,
         "unique_together": [],
-        "indexes": [],
+        "indexes": [describe_index(Index(fields=("slug",)))],
         "pk_field": {
             "name": "id",
             "field_type": "IntField",
@@ -30,7 +48,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -97,8 +115,23 @@ old_models_describe = {
                 "default": None,
                 "description": "User",
                 "docstring": None,
-                "constraints": {"ge": 1, "le": 2147483647},
+                "constraints": {"ge": MIN_INT, "le": 2147483647},
                 "db_field_types": {"": "INT"},
+            },
+            {
+                "name": "title",
+                "field_type": "CharField",
+                "db_column": "title",
+                "python_type": "str",
+                "generated": False,
+                "nullable": False,
+                "unique": True,
+                "indexed": True,
+                "default": None,
+                "description": None,
+                "docstring": None,
+                "constraints": {"max_length": 20},
+                "db_field_types": {"": "VARCHAR(20)"},
             },
         ],
         "fk_fields": [
@@ -165,10 +198,25 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
+            {
+                "name": "name",
+                "field_type": "CharField",
+                "db_column": "name",
+                "python_type": "str",
+                "generated": False,
+                "nullable": False,
+                "unique": True,
+                "indexed": True,
+                "default": None,
+                "description": None,
+                "docstring": None,
+                "constraints": {"max_length": 100},
+                "db_field_types": {"": "VARCHAR(100)"},
+            },
             {
                 "name": "label",
                 "field_type": "CharField",
@@ -234,7 +282,48 @@ old_models_describe = {
         "backward_fk_fields": [],
         "o2o_fields": [],
         "backward_o2o_fields": [],
-        "m2m_fields": [],
+        "m2m_fields": [
+            {
+                "name": "category",
+                "field_type": "ManyToManyFieldInstance",
+                "python_type": "models.Category",
+                "generated": False,
+                "nullable": False,
+                "unique": False,
+                "indexed": False,
+                "default": None,
+                "description": None,
+                "docstring": None,
+                "constraints": {},
+                "model_name": "models.Category",
+                "related_name": "configs",
+                "forward_key": "category_id",
+                "backward_key": "config_id",
+                "through": "config_category",
+                "on_delete": "CASCADE",
+                "_generated": False,
+            },
+            {
+                "name": "categories",
+                "field_type": "ManyToManyFieldInstance",
+                "python_type": "models.Category",
+                "generated": False,
+                "nullable": False,
+                "unique": False,
+                "indexed": False,
+                "default": None,
+                "description": None,
+                "docstring": None,
+                "constraints": {},
+                "model_name": "models.Category",
+                "related_name": "config_set",
+                "forward_key": "category_id",
+                "backward_key": "config_id",
+                "through": "config_category_map",
+                "on_delete": "CASCADE",
+                "_generated": False,
+            },
+        ],
     },
     "models.Email": {
         "name": "models.Email",
@@ -257,7 +346,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -289,7 +378,12 @@ old_models_describe = {
                 "description": None,
                 "docstring": None,
                 "constraints": {},
-                "db_field_types": {"": "BOOL", "sqlite": "INT"},
+                "db_field_types": {
+                    "": "BOOL",
+                    "mssql": "BIT",
+                    "oracle": "NUMBER(1)",
+                    "sqlite": "INT",
+                },
             },
             {
                 "name": "user_id",
@@ -303,7 +397,7 @@ old_models_describe = {
                 "default": None,
                 "description": None,
                 "docstring": None,
-                "constraints": {"ge": 1, "le": 2147483647},
+                "constraints": {"ge": MIN_INT, "le": 2147483647},
                 "db_field_types": {"": "INT"},
             },
         ],
@@ -350,7 +444,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -368,6 +462,21 @@ old_models_describe = {
                 "docstring": None,
                 "constraints": {"max_length": 50},
                 "db_field_types": {"": "VARCHAR(50)"},
+            },
+            {
+                "name": "uid",
+                "field_type": "IntField",
+                "db_column": "uuid",
+                "python_type": "int",
+                "generated": False,
+                "nullable": False,
+                "unique": True,
+                "indexed": True,
+                "default": None,
+                "description": None,
+                "docstring": None,
+                "constraints": {"ge": -2147483648, "le": 2147483647},
+                "db_field_types": {"": "INT"},
             },
             {
                 "name": "view_num",
@@ -400,9 +509,9 @@ old_models_describe = {
                 "db_field_types": {"": "INT"},
             },
             {
-                "name": "is_reviewed",
+                "name": "is_review",
                 "field_type": "BooleanField",
-                "db_column": "is_reviewed",
+                "db_column": "is_review",
                 "python_type": "bool",
                 "generated": False,
                 "nullable": False,
@@ -412,7 +521,12 @@ old_models_describe = {
                 "description": "Is Reviewed",
                 "docstring": None,
                 "constraints": {},
-                "db_field_types": {"": "BOOL", "sqlite": "INT"},
+                "db_field_types": {
+                    "": "BOOL",
+                    "mssql": "BIT",
+                    "oracle": "NUMBER(1)",
+                    "sqlite": "INT",
+                },
             },
             {
                 "name": "type",
@@ -480,6 +594,26 @@ old_models_describe = {
                 "auto_now_add": True,
                 "auto_now": False,
             },
+            {
+                "name": "is_delete",
+                "field_type": "BooleanField",
+                "db_column": "is_delete",
+                "python_type": "bool",
+                "generated": False,
+                "nullable": False,
+                "unique": False,
+                "indexed": False,
+                "default": False,
+                "description": None,
+                "docstring": None,
+                "constraints": {},
+                "db_field_types": {
+                    "": "BOOL",
+                    "mssql": "BIT",
+                    "oracle": "NUMBER(1)",
+                    "sqlite": "INT",
+                },
+            },
         ],
         "fk_fields": [],
         "backward_fk_fields": [],
@@ -516,7 +650,10 @@ old_models_describe = {
         "description": None,
         "docstring": None,
         "unique_together": [],
-        "indexes": [],
+        "indexes": [
+            describe_index(Index(fields=("username", "is_active"))),
+            describe_index(CustomIndex(fields=("is_superuser",))),
+        ],
         "pk_field": {
             "name": "id",
             "field_type": "IntField",
@@ -529,7 +666,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -597,7 +734,12 @@ old_models_describe = {
                 "description": "Is Active",
                 "docstring": None,
                 "constraints": {},
-                "db_field_types": {"": "BOOL", "sqlite": "INT"},
+                "db_field_types": {
+                    "": "BOOL",
+                    "mssql": "BIT",
+                    "oracle": "NUMBER(1)",
+                    "sqlite": "INT",
+                },
             },
             {
                 "name": "is_superuser",
@@ -612,7 +754,12 @@ old_models_describe = {
                 "description": "Is SuperUser",
                 "docstring": None,
                 "constraints": {},
-                "db_field_types": {"": "BOOL", "sqlite": "INT"},
+                "db_field_types": {
+                    "": "BOOL",
+                    "mssql": "BIT",
+                    "oracle": "NUMBER(1)",
+                    "sqlite": "INT",
+                },
             },
             {
                 "name": "avatar",
@@ -714,7 +861,7 @@ old_models_describe = {
             "default": None,
             "description": None,
             "docstring": None,
-            "constraints": {"ge": 1, "le": 2147483647},
+            "constraints": {"ge": MIN_INT, "le": 2147483647},
             "db_field_types": {"": "INT"},
         },
         "data_fields": [
@@ -778,177 +925,217 @@ def test_migrate(mocker: MockerFixture):
     models.py diff with old_models.py
     - change email pk: id -> email_id
     - add field: Email.address
-    - add fk: Config.user
-    - drop fk: Email.user
+    - add fk field: Config.user
+    - drop fk field: Email.user
     - drop field: User.avatar
     - add index: Email.email
+    - change index type for indexed field: Email.slug
     - add many to many: Email.users
-    - remove unique: User.username
+    - add one to one: Email.config
+    - remove unique: Category.title
+    - add unique: User.username
     - change column: length User.password
     - add unique_together: (name,type) of Product
+    - add one more many to many field: Product.users
+    - drop unique field: Config.name
     - alter default: Config.status
     - rename column: Product.image -> Product.pic
+    - rename column: Product.is_review -> Product.is_reviewed
+    - rename column: Product.is_delete -> Product.is_deleted
+    - rename fk column: Category.user -> Category.owner
     """
-    mocker.patch("click.prompt", side_effect=(True,))
+    mocker.patch("asyncclick.prompt", side_effect=(True, True, True, True))
 
     models_describe = get_models_describe("models")
     Migrate.app = "models"
     if isinstance(Migrate.ddl, SqliteDDL):
         with pytest.raises(NotSupportError):
             Migrate.diff_models(old_models_describe, models_describe)
+        Migrate.upgrade_operators.clear()
+        with pytest.raises(NotSupportError):
             Migrate.diff_models(models_describe, old_models_describe, False)
+        Migrate.downgrade_operators.clear()
     else:
         Migrate.diff_models(old_models_describe, models_describe)
         Migrate.diff_models(models_describe, old_models_describe, False)
-    Migrate._merge_operators()
+        Migrate._merge_operators()
     if isinstance(Migrate.ddl, MysqlDDL):
-        expected_upgrade_operators = set(
-            [
-                "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200)",
-                "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(100) NOT NULL",
-                "ALTER TABLE `config` ADD `user_id` INT NOT NULL  COMMENT 'User'",
-                "ALTER TABLE `config` ADD CONSTRAINT `fk_config_user_17daa970` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE",
-                "ALTER TABLE `config` ALTER COLUMN `status` DROP DEFAULT",
-                "ALTER TABLE `config` MODIFY COLUMN `value` JSON NOT NULL",
-                "ALTER TABLE `email` ADD `address` VARCHAR(200) NOT NULL",
-                "ALTER TABLE `email` DROP COLUMN `user_id`",
-                "CREATE TABLE `email_user` (`email_id` INT NOT NULL REFERENCES `email` (`email_id`) ON DELETE CASCADE,`user_id` INT NOT NULL REFERENCES `user` (`id`) ON DELETE CASCADE) CHARACTER SET utf8mb4",
-                "ALTER TABLE `configs` RENAME TO `config`",
-                "ALTER TABLE `product` RENAME COLUMN `image` TO `pic`",
-                "ALTER TABLE `email` RENAME COLUMN `id` TO `email_id`",
-                "ALTER TABLE `product` ADD INDEX `idx_product_name_869427` (`name`, `type_db_alias`)",
-                "ALTER TABLE `email` ADD INDEX `idx_email_email_4a1a33` (`email`)",
-                "ALTER TABLE `product` ADD UNIQUE INDEX `uid_product_name_869427` (`name`, `type_db_alias`)",
-                "ALTER TABLE `product` ALTER COLUMN `view_num` SET DEFAULT 0",
-                "ALTER TABLE `product` MODIFY COLUMN `created_at` DATETIME(6) NOT NULL  DEFAULT CURRENT_TIMESTAMP(6)",
-                "ALTER TABLE `product` MODIFY COLUMN `is_reviewed` BOOL NOT NULL  COMMENT 'Is Reviewed'",
-                "ALTER TABLE `user` DROP COLUMN `avatar`",
-                "ALTER TABLE `user` MODIFY COLUMN `password` VARCHAR(100) NOT NULL",
-                "ALTER TABLE `user` MODIFY COLUMN `intro` LONGTEXT NOT NULL",
-                "ALTER TABLE `user` MODIFY COLUMN `last_login` DATETIME(6) NOT NULL  COMMENT 'Last Login'",
-                "ALTER TABLE `user` MODIFY COLUMN `is_active` BOOL NOT NULL  COMMENT 'Is Active' DEFAULT 1",
-                "ALTER TABLE `user` MODIFY COLUMN `is_superuser` BOOL NOT NULL  COMMENT 'Is SuperUser' DEFAULT 0",
-                "ALTER TABLE `user` MODIFY COLUMN `longitude` DECIMAL(10,8) NOT NULL",
-                "ALTER TABLE `user` ADD UNIQUE INDEX `uid_user_usernam_9987ab` (`username`)",
-                "CREATE TABLE IF NOT EXISTS `newmodel` (\n    `id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT,\n    `name` VARCHAR(50) NOT NULL\n) CHARACTER SET utf8mb4;",
-                "ALTER TABLE `category` MODIFY COLUMN `created_at` DATETIME(6) NOT NULL  DEFAULT CURRENT_TIMESTAMP(6)",
-                "ALTER TABLE `product` MODIFY COLUMN `body` LONGTEXT NOT NULL",
-                "ALTER TABLE `email` MODIFY COLUMN `is_primary` BOOL NOT NULL  DEFAULT 0",
-            ]
-        )
-        expected_downgrade_operators = set(
-            [
-                "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200) NOT NULL",
-                "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(200) NOT NULL",
-                "ALTER TABLE `config` DROP COLUMN `user_id`",
-                "ALTER TABLE `config` DROP FOREIGN KEY `fk_config_user_17daa970`",
-                "ALTER TABLE `config` ALTER COLUMN `status` SET DEFAULT 1",
-                "ALTER TABLE `email` ADD `user_id` INT NOT NULL",
-                "ALTER TABLE `email` DROP COLUMN `address`",
-                "ALTER TABLE `config` RENAME TO `configs`",
-                "ALTER TABLE `product` RENAME COLUMN `pic` TO `image`",
-                "ALTER TABLE `email` RENAME COLUMN `email_id` TO `id`",
-                "ALTER TABLE `product` DROP INDEX `idx_product_name_869427`",
-                "ALTER TABLE `email` DROP INDEX `idx_email_email_4a1a33`",
-                "ALTER TABLE `product` DROP INDEX `uid_product_name_869427`",
-                "ALTER TABLE `product` ALTER COLUMN `view_num` DROP DEFAULT",
-                "ALTER TABLE `user` ADD `avatar` VARCHAR(200) NOT NULL  DEFAULT ''",
-                "ALTER TABLE `user` DROP INDEX `idx_user_usernam_9987ab`",
-                "ALTER TABLE `user` MODIFY COLUMN `password` VARCHAR(200) NOT NULL",
-                "DROP TABLE IF EXISTS `email_user`",
-                "DROP TABLE IF EXISTS `newmodel`",
-                "ALTER TABLE `user` MODIFY COLUMN `intro` LONGTEXT NOT NULL",
-                "ALTER TABLE `config` MODIFY COLUMN `value` TEXT NOT NULL",
-                "ALTER TABLE `category` MODIFY COLUMN `created_at` DATETIME(6) NOT NULL  DEFAULT CURRENT_TIMESTAMP(6)",
-                "ALTER TABLE `product` MODIFY COLUMN `created_at` DATETIME(6) NOT NULL  DEFAULT CURRENT_TIMESTAMP(6)",
-                "ALTER TABLE `product` MODIFY COLUMN `is_reviewed` BOOL NOT NULL  COMMENT 'Is Reviewed'",
-                "ALTER TABLE `user` MODIFY COLUMN `last_login` DATETIME(6) NOT NULL  COMMENT 'Last Login'",
-                "ALTER TABLE `user` MODIFY COLUMN `is_active` BOOL NOT NULL  COMMENT 'Is Active' DEFAULT 1",
-                "ALTER TABLE `user` MODIFY COLUMN `is_superuser` BOOL NOT NULL  COMMENT 'Is SuperUser' DEFAULT 0",
-                "ALTER TABLE `user` MODIFY COLUMN `longitude` DECIMAL(12,9) NOT NULL",
-                "ALTER TABLE `product` MODIFY COLUMN `body` LONGTEXT NOT NULL",
-                "ALTER TABLE `email` MODIFY COLUMN `is_primary` BOOL NOT NULL  DEFAULT 0",
-            ]
-        )
-        assert not set(Migrate.upgrade_operators).symmetric_difference(expected_upgrade_operators)
+        expected_upgrade_operators = {
+            "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200)",
+            "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(100) NOT NULL",
+            "ALTER TABLE `category` DROP INDEX `title`",
+            "ALTER TABLE `category` RENAME COLUMN `user_id` TO `owner_id`",
+            "ALTER TABLE `category` ADD CONSTRAINT `fk_category_user_110d4c63` FOREIGN KEY (`owner_id`) REFERENCES `user` (`id`) ON DELETE CASCADE",
+            "ALTER TABLE `category` ADD FULLTEXT INDEX `idx_category_slug_e9bcff` (`slug`)",
+            "ALTER TABLE `category` DROP INDEX `idx_category_slug_e9bcff`",
+            "ALTER TABLE `email` DROP COLUMN `user_id`",
+            "ALTER TABLE `config` DROP COLUMN `name`",
+            "ALTER TABLE `config` DROP INDEX `name`",
+            "ALTER TABLE `config` ADD `user_id` INT NOT NULL COMMENT 'User'",
+            "ALTER TABLE `config` ADD CONSTRAINT `fk_config_user_17daa970` FOREIGN KEY (`user_id`) REFERENCES `user` (`id`) ON DELETE CASCADE",
+            "ALTER TABLE `config` ALTER COLUMN `status` DROP DEFAULT",
+            "ALTER TABLE `email` ADD `address` VARCHAR(200) NOT NULL",
+            "ALTER TABLE `email` ADD CONSTRAINT `fk_email_config_76a9dc71` FOREIGN KEY (`config_id`) REFERENCES `config` (`id`) ON DELETE CASCADE",
+            "ALTER TABLE `email` ADD `config_id` INT NOT NULL UNIQUE",
+            "ALTER TABLE `configs` RENAME TO `config`",
+            "ALTER TABLE `product` DROP COLUMN `uuid`",
+            "ALTER TABLE `product` DROP INDEX `uuid`",
+            "ALTER TABLE `product` RENAME COLUMN `image` TO `pic`",
+            "ALTER TABLE `email` RENAME COLUMN `id` TO `email_id`",
+            "ALTER TABLE `product` ADD INDEX `idx_product_name_869427` (`name`, `type_db_alias`)",
+            "ALTER TABLE `email` ADD INDEX `idx_email_email_4a1a33` (`email`)",
+            "ALTER TABLE `product` ADD UNIQUE INDEX `uid_product_name_869427` (`name`, `type_db_alias`)",
+            "ALTER TABLE `product` ALTER COLUMN `view_num` SET DEFAULT 0",
+            "ALTER TABLE `product` RENAME COLUMN `is_delete` TO `is_deleted`",
+            "ALTER TABLE `product` RENAME COLUMN `is_review` TO `is_reviewed`",
+            "ALTER TABLE `user` DROP COLUMN `avatar`",
+            "ALTER TABLE `user` MODIFY COLUMN `password` VARCHAR(100) NOT NULL",
+            "ALTER TABLE `user` MODIFY COLUMN `longitude` DECIMAL(10,8) NOT NULL",
+            "ALTER TABLE `user` ADD UNIQUE INDEX `username` (`username`)",
+            "CREATE TABLE `email_user` (\n    `email_id` INT NOT NULL REFERENCES `email` (`email_id`) ON DELETE CASCADE,\n    `user_id` INT NOT NULL REFERENCES `user` (`id`) ON DELETE CASCADE\n) CHARACTER SET utf8mb4",
+            "CREATE TABLE IF NOT EXISTS `newmodel` (\n    `id` INT NOT NULL PRIMARY KEY AUTO_INCREMENT,\n    `name` VARCHAR(50) NOT NULL\n) CHARACTER SET utf8mb4",
+            "CREATE TABLE `product_user` (\n    `product_id` INT NOT NULL REFERENCES `product` (`id`) ON DELETE CASCADE,\n    `user_id` INT NOT NULL REFERENCES `user` (`id`) ON DELETE CASCADE\n) CHARACTER SET utf8mb4",
+            "CREATE TABLE `config_category_map` (\n    `category_id` INT NOT NULL REFERENCES `category` (`id`) ON DELETE CASCADE,\n    `config_id` INT NOT NULL REFERENCES `config` (`id`) ON DELETE CASCADE\n) CHARACTER SET utf8mb4",
+            "DROP TABLE IF EXISTS `config_category`",
+        }
+        upgrade_operators = set(Migrate.upgrade_operators)
+        upgrade_more_than_expected = upgrade_operators - expected_upgrade_operators
+        assert not upgrade_more_than_expected
+        upgrade_less_than_expected = expected_upgrade_operators - upgrade_operators
+        assert not upgrade_less_than_expected
 
-        assert not set(Migrate.downgrade_operators).symmetric_difference(
-            expected_downgrade_operators
-        )
+        expected_downgrade_operators = {
+            "ALTER TABLE `category` MODIFY COLUMN `name` VARCHAR(200) NOT NULL",
+            "ALTER TABLE `category` MODIFY COLUMN `slug` VARCHAR(200) NOT NULL",
+            "ALTER TABLE `category` ADD UNIQUE INDEX `title` (`title`)",
+            "ALTER TABLE `category` RENAME COLUMN `owner_id` TO `user_id`",
+            "ALTER TABLE `category` DROP FOREIGN KEY `fk_category_user_110d4c63`",
+            "ALTER TABLE `category` ADD INDEX `idx_category_slug_e9bcff` (`slug`)",
+            "ALTER TABLE `category` DROP INDEX `idx_category_slug_e9bcff`",
+            "ALTER TABLE `config` ADD `name` VARCHAR(100) NOT NULL UNIQUE",
+            "ALTER TABLE `config` ADD UNIQUE INDEX `name` (`name`)",
+            "ALTER TABLE `config` DROP FOREIGN KEY `fk_config_user_17daa970`",
+            "ALTER TABLE `config` ALTER COLUMN `status` SET DEFAULT 1",
+            "ALTER TABLE `email` ADD `user_id` INT NOT NULL",
+            "ALTER TABLE `config` DROP COLUMN `user_id`",
+            "ALTER TABLE `email` DROP COLUMN `address`",
+            "ALTER TABLE `email` DROP COLUMN `config_id`",
+            "ALTER TABLE `email` DROP FOREIGN KEY `fk_email_config_76a9dc71`",
+            "ALTER TABLE `config` RENAME TO `configs`",
+            "ALTER TABLE `product` RENAME COLUMN `pic` TO `image`",
+            "ALTER TABLE `email` RENAME COLUMN `email_id` TO `id`",
+            "ALTER TABLE `product` ADD `uuid` INT NOT NULL UNIQUE",
+            "ALTER TABLE `product` ADD UNIQUE INDEX `uuid` (`uuid`)",
+            "ALTER TABLE `product` DROP INDEX `idx_product_name_869427`",
+            "ALTER TABLE `email` DROP INDEX `idx_email_email_4a1a33`",
+            "ALTER TABLE `product` DROP INDEX `uid_product_name_869427`",
+            "ALTER TABLE `product` ALTER COLUMN `view_num` DROP DEFAULT",
+            "ALTER TABLE `product` RENAME COLUMN `is_deleted` TO `is_delete`",
+            "ALTER TABLE `product` RENAME COLUMN `is_reviewed` TO `is_review`",
+            "ALTER TABLE `user` ADD `avatar` VARCHAR(200) NOT NULL DEFAULT ''",
+            "ALTER TABLE `user` DROP INDEX `username`",
+            "ALTER TABLE `user` MODIFY COLUMN `password` VARCHAR(200) NOT NULL",
+            "DROP TABLE IF EXISTS `email_user`",
+            "DROP TABLE IF EXISTS `newmodel`",
+            "DROP TABLE IF EXISTS `product_user`",
+            "ALTER TABLE `user` MODIFY COLUMN `longitude` DECIMAL(12,9) NOT NULL",
+            "CREATE TABLE `config_category` (\n    `config_id` INT NOT NULL REFERENCES `config` (`id`) ON DELETE CASCADE,\n    `category_id` INT NOT NULL REFERENCES `category` (`id`) ON DELETE CASCADE\n) CHARACTER SET utf8mb4",
+            "DROP TABLE IF EXISTS `config_category_map`",
+        }
+        downgrade_operators = set(Migrate.downgrade_operators)
+        downgrade_more_than_expected = downgrade_operators - expected_downgrade_operators
+        assert not downgrade_more_than_expected
+        downgrade_less_than_expected = expected_downgrade_operators - downgrade_operators
+        assert not downgrade_less_than_expected
 
     elif isinstance(Migrate.ddl, PostgresDDL):
-        expected_upgrade_operators = set(
-            [
-                'ALTER TABLE "category" ALTER COLUMN "name" DROP NOT NULL',
-                'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(100) USING "slug"::VARCHAR(100)',
-                'ALTER TABLE "category" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
-                'ALTER TABLE "config" ADD "user_id" INT NOT NULL',
-                'ALTER TABLE "config" ADD CONSTRAINT "fk_config_user_17daa970" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE CASCADE',
-                'ALTER TABLE "config" ALTER COLUMN "status" DROP DEFAULT',
-                'ALTER TABLE "config" ALTER COLUMN "value" TYPE JSONB USING "value"::JSONB',
-                'ALTER TABLE "configs" RENAME TO "config"',
-                'ALTER TABLE "email" ADD "address" VARCHAR(200) NOT NULL',
-                'ALTER TABLE "email" DROP COLUMN "user_id"',
-                'ALTER TABLE "email" RENAME COLUMN "id" TO "email_id"',
-                'ALTER TABLE "email" ALTER COLUMN "is_primary" TYPE BOOL USING "is_primary"::BOOL',
-                'ALTER TABLE "product" ALTER COLUMN "view_num" SET DEFAULT 0',
-                'ALTER TABLE "product" RENAME COLUMN "image" TO "pic"',
-                'ALTER TABLE "product" ALTER COLUMN "is_reviewed" TYPE BOOL USING "is_reviewed"::BOOL',
-                'ALTER TABLE "product" ALTER COLUMN "body" TYPE TEXT USING "body"::TEXT',
-                'ALTER TABLE "product" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
-                'ALTER TABLE "user" ALTER COLUMN "password" TYPE VARCHAR(100) USING "password"::VARCHAR(100)',
-                'ALTER TABLE "user" DROP COLUMN "avatar"',
-                'ALTER TABLE "user" ALTER COLUMN "is_superuser" TYPE BOOL USING "is_superuser"::BOOL',
-                'ALTER TABLE "user" ALTER COLUMN "last_login" TYPE TIMESTAMPTZ USING "last_login"::TIMESTAMPTZ',
-                'ALTER TABLE "user" ALTER COLUMN "intro" TYPE TEXT USING "intro"::TEXT',
-                'ALTER TABLE "user" ALTER COLUMN "is_active" TYPE BOOL USING "is_active"::BOOL',
-                'ALTER TABLE "user" ALTER COLUMN "longitude" TYPE DECIMAL(10,8) USING "longitude"::DECIMAL(10,8)',
-                'CREATE INDEX "idx_product_name_869427" ON "product" ("name", "type_db_alias")',
-                'CREATE INDEX "idx_email_email_4a1a33" ON "email" ("email")',
-                'CREATE TABLE "email_user" ("email_id" INT NOT NULL REFERENCES "email" ("email_id") ON DELETE CASCADE,"user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE)',
-                'CREATE TABLE IF NOT EXISTS "newmodel" (\n    "id" SERIAL NOT NULL PRIMARY KEY,\n    "name" VARCHAR(50) NOT NULL\n);\nCOMMENT ON COLUMN "config"."user_id" IS \'User\';',
-                'CREATE UNIQUE INDEX "uid_product_name_869427" ON "product" ("name", "type_db_alias")',
-                'CREATE UNIQUE INDEX "uid_user_usernam_9987ab" ON "user" ("username")',
-            ]
-        )
-        expected_downgrade_operators = set(
-            [
-                'ALTER TABLE "category" ALTER COLUMN "name" SET NOT NULL',
-                'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(200) USING "slug"::VARCHAR(200)',
-                'ALTER TABLE "category" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
-                'ALTER TABLE "config" ALTER COLUMN "status" SET DEFAULT 1',
-                'ALTER TABLE "config" DROP COLUMN "user_id"',
-                'ALTER TABLE "config" DROP CONSTRAINT "fk_config_user_17daa970"',
-                'ALTER TABLE "config" RENAME TO "configs"',
-                'ALTER TABLE "config" ALTER COLUMN "value" TYPE JSONB USING "value"::JSONB',
-                'ALTER TABLE "email" ADD "user_id" INT NOT NULL',
-                'ALTER TABLE "email" DROP COLUMN "address"',
-                'ALTER TABLE "email" RENAME COLUMN "email_id" TO "id"',
-                'ALTER TABLE "email" ALTER COLUMN "is_primary" TYPE BOOL USING "is_primary"::BOOL',
-                'ALTER TABLE "product" ALTER COLUMN "view_num" DROP DEFAULT',
-                'ALTER TABLE "product" RENAME COLUMN "pic" TO "image"',
-                'ALTER TABLE "user" ADD "avatar" VARCHAR(200) NOT NULL  DEFAULT \'\'',
-                'ALTER TABLE "user" ALTER COLUMN "password" TYPE VARCHAR(200) USING "password"::VARCHAR(200)',
-                'ALTER TABLE "user" ALTER COLUMN "last_login" TYPE TIMESTAMPTZ USING "last_login"::TIMESTAMPTZ',
-                'ALTER TABLE "user" ALTER COLUMN "is_superuser" TYPE BOOL USING "is_superuser"::BOOL',
-                'ALTER TABLE "user" ALTER COLUMN "is_active" TYPE BOOL USING "is_active"::BOOL',
-                'ALTER TABLE "user" ALTER COLUMN "intro" TYPE TEXT USING "intro"::TEXT',
-                'ALTER TABLE "user" ALTER COLUMN "longitude" TYPE DECIMAL(12,9) USING "longitude"::DECIMAL(12,9)',
-                'ALTER TABLE "product" ALTER COLUMN "created_at" TYPE TIMESTAMPTZ USING "created_at"::TIMESTAMPTZ',
-                'ALTER TABLE "product" ALTER COLUMN "is_reviewed" TYPE BOOL USING "is_reviewed"::BOOL',
-                'ALTER TABLE "product" ALTER COLUMN "body" TYPE TEXT USING "body"::TEXT',
-                'DROP INDEX "idx_product_name_869427"',
-                'DROP INDEX "idx_email_email_4a1a33"',
-                'DROP INDEX "idx_user_usernam_9987ab"',
-                'DROP INDEX "uid_product_name_869427"',
-                'DROP TABLE IF EXISTS "email_user"',
-                'DROP TABLE IF EXISTS "newmodel"',
-            ]
-        )
-        assert not set(Migrate.upgrade_operators).symmetric_difference(expected_upgrade_operators)
-        assert not set(Migrate.downgrade_operators).symmetric_difference(
-            expected_downgrade_operators
-        )
+        expected_upgrade_operators = {
+            'DROP INDEX IF EXISTS "uid_category_title_f7fc03"',
+            'ALTER TABLE "category" ALTER COLUMN "name" DROP NOT NULL',
+            'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(100) USING "slug"::VARCHAR(100)',
+            'ALTER TABLE "category" RENAME COLUMN "user_id" TO "owner_id"',
+            'ALTER TABLE "category" ADD CONSTRAINT "fk_category_user_110d4c63" FOREIGN KEY ("owner_id") REFERENCES "user" ("id") ON DELETE CASCADE',
+            'CREATE INDEX IF NOT EXISTS "idx_category_slug_e9bcff" ON "category" USING HASH ("slug")',
+            'DROP INDEX IF EXISTS "idx_category_slug_e9bcff"',
+            'ALTER TABLE "config" DROP COLUMN "name"',
+            'DROP INDEX IF EXISTS "uid_config_name_2c83c8"',
+            'ALTER TABLE "config" ADD "user_id" INT NOT NULL',
+            'ALTER TABLE "config" ADD CONSTRAINT "fk_config_user_17daa970" FOREIGN KEY ("user_id") REFERENCES "user" ("id") ON DELETE CASCADE',
+            'ALTER TABLE "config" ALTER COLUMN "status" DROP DEFAULT',
+            'ALTER TABLE "configs" RENAME TO "config"',
+            'ALTER TABLE "email" ADD "address" VARCHAR(200) NOT NULL',
+            'ALTER TABLE "email" RENAME COLUMN "id" TO "email_id"',
+            'ALTER TABLE "email" DROP COLUMN "user_id"',
+            'ALTER TABLE "email" ADD CONSTRAINT "fk_email_config_76a9dc71" FOREIGN KEY ("config_id") REFERENCES "config" ("id") ON DELETE CASCADE',
+            'ALTER TABLE "email" ADD "config_id" INT NOT NULL UNIQUE',
+            'DROP INDEX IF EXISTS "uid_product_uuid_d33c18"',
+            'ALTER TABLE "product" DROP COLUMN "uuid"',
+            'ALTER TABLE "product" ALTER COLUMN "view_num" SET DEFAULT 0',
+            'ALTER TABLE "product" RENAME COLUMN "image" TO "pic"',
+            'ALTER TABLE "product" RENAME COLUMN "is_review" TO "is_reviewed"',
+            'ALTER TABLE "product" RENAME COLUMN "is_delete" TO "is_deleted"',
+            'ALTER TABLE "user" ALTER COLUMN "password" TYPE VARCHAR(100) USING "password"::VARCHAR(100)',
+            'ALTER TABLE "user" DROP COLUMN "avatar"',
+            'ALTER TABLE "user" ALTER COLUMN "longitude" TYPE DECIMAL(10,8) USING "longitude"::DECIMAL(10,8)',
+            'CREATE INDEX IF NOT EXISTS "idx_product_name_869427" ON "product" ("name", "type_db_alias")',
+            'CREATE INDEX IF NOT EXISTS "idx_email_email_4a1a33" ON "email" ("email")',
+            'CREATE TABLE "email_user" (\n    "email_id" INT NOT NULL REFERENCES "email" ("email_id") ON DELETE CASCADE,\n    "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE\n)',
+            'CREATE TABLE IF NOT EXISTS "newmodel" (\n    "id" SERIAL NOT NULL PRIMARY KEY,\n    "name" VARCHAR(50) NOT NULL\n);\nCOMMENT ON COLUMN "config"."user_id" IS \'User\'',
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uid_product_name_869427" ON "product" ("name", "type_db_alias")',
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uid_user_usernam_9987ab" ON "user" ("username")',
+            'CREATE TABLE "product_user" (\n    "product_id" INT NOT NULL REFERENCES "product" ("id") ON DELETE CASCADE,\n    "user_id" INT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE\n)',
+            'CREATE TABLE "config_category_map" (\n    "category_id" INT NOT NULL REFERENCES "category" ("id") ON DELETE CASCADE,\n    "config_id" INT NOT NULL REFERENCES "config" ("id") ON DELETE CASCADE\n)',
+            'DROP TABLE IF EXISTS "config_category"',
+        }
+        upgrade_operators = set(Migrate.upgrade_operators)
+        upgrade_more_than_expected = upgrade_operators - expected_upgrade_operators
+        assert not upgrade_more_than_expected
+        upgrade_less_than_expected = expected_upgrade_operators - upgrade_operators
+        assert not upgrade_less_than_expected
+
+        expected_downgrade_operators = {
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uid_category_title_f7fc03" ON "category" ("title")',
+            'ALTER TABLE "category" ALTER COLUMN "name" SET NOT NULL',
+            'ALTER TABLE "category" ALTER COLUMN "slug" TYPE VARCHAR(200) USING "slug"::VARCHAR(200)',
+            'ALTER TABLE "category" RENAME COLUMN "owner_id" TO "user_id"',
+            'ALTER TABLE "category" DROP CONSTRAINT IF EXISTS "fk_category_user_110d4c63"',
+            'DROP INDEX IF EXISTS "idx_category_slug_e9bcff"',
+            'CREATE INDEX IF NOT EXISTS "idx_category_slug_e9bcff" ON "category" ("slug")',
+            'ALTER TABLE "config" ADD "name" VARCHAR(100) NOT NULL UNIQUE',
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uid_config_name_2c83c8" ON "config" ("name")',
+            'ALTER TABLE "config" ALTER COLUMN "status" SET DEFAULT 1',
+            'ALTER TABLE "config" DROP CONSTRAINT IF EXISTS "fk_config_user_17daa970"',
+            'ALTER TABLE "config" RENAME TO "configs"',
+            'ALTER TABLE "config" DROP COLUMN "user_id"',
+            'ALTER TABLE "email" ADD "user_id" INT NOT NULL',
+            'ALTER TABLE "email" DROP COLUMN "address"',
+            'ALTER TABLE "email" RENAME COLUMN "email_id" TO "id"',
+            'ALTER TABLE "email" DROP COLUMN "config_id"',
+            'ALTER TABLE "email" DROP CONSTRAINT IF EXISTS "fk_email_config_76a9dc71"',
+            'ALTER TABLE "product" ADD "uuid" INT NOT NULL UNIQUE',
+            'CREATE UNIQUE INDEX IF NOT EXISTS "uid_product_uuid_d33c18" ON "product" ("uuid")',
+            'ALTER TABLE "product" ALTER COLUMN "view_num" DROP DEFAULT',
+            'ALTER TABLE "product" RENAME COLUMN "pic" TO "image"',
+            'ALTER TABLE "product" RENAME COLUMN "is_deleted" TO "is_delete"',
+            'ALTER TABLE "product" RENAME COLUMN "is_reviewed" TO "is_review"',
+            'ALTER TABLE "user" ADD "avatar" VARCHAR(200) NOT NULL DEFAULT \'\'',
+            'ALTER TABLE "user" ALTER COLUMN "password" TYPE VARCHAR(200) USING "password"::VARCHAR(200)',
+            'ALTER TABLE "user" ALTER COLUMN "longitude" TYPE DECIMAL(12,9) USING "longitude"::DECIMAL(12,9)',
+            'DROP TABLE IF EXISTS "product_user"',
+            'DROP INDEX IF EXISTS "idx_product_name_869427"',
+            'DROP INDEX IF EXISTS "idx_email_email_4a1a33"',
+            'DROP INDEX IF EXISTS "uid_user_usernam_9987ab"',
+            'DROP INDEX IF EXISTS "uid_product_name_869427"',
+            'DROP TABLE IF EXISTS "email_user"',
+            'DROP TABLE IF EXISTS "newmodel"',
+            'CREATE TABLE "config_category" (\n    "config_id" INT NOT NULL REFERENCES "config" ("id") ON DELETE CASCADE,\n    "category_id" INT NOT NULL REFERENCES "category" ("id") ON DELETE CASCADE\n)',
+            'DROP TABLE IF EXISTS "config_category_map"',
+        }
+        downgrade_operators = set(Migrate.downgrade_operators)
+        downgrade_more_than_expected = downgrade_operators - expected_downgrade_operators
+        assert not downgrade_more_than_expected
+        downgrade_less_than_expected = expected_downgrade_operators - downgrade_operators
+        assert not downgrade_less_than_expected
 
     elif isinstance(Migrate.ddl, SqliteDDL):
         assert Migrate.upgrade_operators == []
@@ -959,18 +1146,54 @@ def test_sort_all_version_files(mocker):
     mocker.patch(
         "os.listdir",
         return_value=[
-            "1_datetime_update.sql",
-            "11_datetime_update.sql",
-            "10_datetime_update.sql",
-            "2_datetime_update.sql",
+            "1_datetime_update.py",
+            "11_datetime_update.py",
+            "10_datetime_update.py",
+            "2_datetime_update.py",
         ],
     )
 
     Migrate.migrate_location = "."
 
     assert Migrate.get_all_version_files() == [
-        "1_datetime_update.sql",
-        "2_datetime_update.sql",
-        "10_datetime_update.sql",
-        "11_datetime_update.sql",
+        "1_datetime_update.py",
+        "2_datetime_update.py",
+        "10_datetime_update.py",
+        "11_datetime_update.py",
     ]
+
+
+def test_sort_files_containing_non_migrations(mocker):
+    mocker.patch(
+        "os.listdir",
+        return_value=[
+            "1_datetime_update.py",
+            "11_datetime_update.py",
+            "10_datetime_update.py",
+            "2_datetime_update.py",
+            "not_a_migration.py",
+            "999.py",
+            "123foo_not_a_migration.py",
+        ],
+    )
+
+    Migrate.migrate_location = "."
+
+    assert Migrate.get_all_version_files() == [
+        "1_datetime_update.py",
+        "2_datetime_update.py",
+        "10_datetime_update.py",
+        "11_datetime_update.py",
+    ]
+
+
+async def test_empty_migration(mocker, tmp_path: Path) -> None:
+    mocker.patch("os.listdir", return_value=[])
+    Migrate.app = "foo"
+    expected_content = MIGRATE_TEMPLATE.format(upgrade_sql="", downgrade_sql="")
+    Migrate.migrate_location = tmp_path
+
+    migration_file = await Migrate.migrate("update", True)
+
+    f = tmp_path / migration_file
+    assert f.read_text() == expected_content

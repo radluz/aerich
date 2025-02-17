@@ -1,8 +1,16 @@
+from __future__ import annotations
+
 import datetime
 import uuid
 from enum import IntEnum
 
 from tortoise import Model, fields
+from tortoise.contrib.mysql.indexes import FullTextIndex
+from tortoise.contrib.postgres.indexes import HashIndex
+from tortoise.indexes import Index
+
+from tests._utils import Dialect
+from tests.indexes import CustomIndex
 
 
 class ProductType(IntEnum):
@@ -31,13 +39,20 @@ class User(Model):
     intro = fields.TextField(default="")
     longitude = fields.DecimalField(max_digits=10, decimal_places=8)
 
+    products: fields.ManyToManyRelation[Product]
+
+    class Meta:
+        # reverse indexes elements
+        indexes = [CustomIndex(fields=("is_superuser",)), Index(fields=("username", "is_active"))]
+
 
 class Email(Model):
-    email_id = fields.IntField(pk=True)
-    email = fields.CharField(max_length=200, index=True)
+    email_id = fields.IntField(primary_key=True)
+    email = fields.CharField(max_length=200, db_index=True)
     is_primary = fields.BooleanField(default=False)
     address = fields.CharField(max_length=200)
-    users = fields.ManyToManyField("models.User")
+    users: fields.ManyToManyRelation[User] = fields.ManyToManyField("models.User")
+    config: fields.OneToOneRelation[Config] = fields.OneToOneField("models.Config")
 
 
 def default_name():
@@ -47,22 +62,39 @@ def default_name():
 class Category(Model):
     slug = fields.CharField(max_length=100)
     name = fields.CharField(max_length=200, null=True, default=default_name)
-    user = fields.ForeignKeyField("models.User", description="User")
+    owner: fields.ForeignKeyRelation[User] = fields.ForeignKeyField(
+        "models.User", description="User"
+    )
+    title = fields.CharField(max_length=20, unique=False)
     created_at = fields.DatetimeField(auto_now_add=True)
+
+    class Meta:
+        if Dialect.is_postgres():
+            indexes = [HashIndex(fields=("slug",))]
+        elif Dialect.is_mysql():
+            indexes = [FullTextIndex(fields=("slug",))]  # type:ignore
+        else:
+            indexes = [Index(fields=("slug",))]  # type:ignore
 
 
 class Product(Model):
-    categories = fields.ManyToManyField("models.Category")
+    categories: fields.ManyToManyRelation[Category] = fields.ManyToManyField(
+        "models.Category", null=False
+    )
+    users: fields.ManyToManyRelation[User] = fields.ManyToManyField(
+        "models.User", related_name="products"
+    )
     name = fields.CharField(max_length=50)
     view_num = fields.IntField(description="View Num", default=0)
     sort = fields.IntField()
     is_reviewed = fields.BooleanField(description="Is Reviewed")
-    type = fields.IntEnumField(
+    type: int = fields.IntEnumField(
         ProductType, description="Product Type", source_field="type_db_alias"
     )
     pic = fields.CharField(max_length=200)
     body = fields.TextField()
     created_at = fields.DatetimeField(auto_now_add=True)
+    is_deleted = fields.BooleanField(default=False)
 
     class Meta:
         unique_together = (("name", "type"),)
@@ -70,11 +102,18 @@ class Product(Model):
 
 
 class Config(Model):
+    categories: fields.ManyToManyRelation[Category] = fields.ManyToManyField(
+        "models.Category", through="config_category_map", related_name="category_set"
+    )
     label = fields.CharField(max_length=200)
     key = fields.CharField(max_length=20)
-    value = fields.JSONField()
+    value: dict = fields.JSONField()
     status: Status = fields.IntEnumField(Status)
-    user = fields.ForeignKeyField("models.User", description="User")
+    user: fields.ForeignKeyRelation[User] = fields.ForeignKeyField(
+        "models.User", description="User"
+    )
+
+    email: fields.OneToOneRelation[Email]
 
 
 class NewModel(Model):

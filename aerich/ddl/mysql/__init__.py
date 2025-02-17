@@ -1,6 +1,13 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from tortoise.backends.mysql.schema_generator import MySQLSchemaGenerator
 
 from aerich.ddl import BaseDDL
+
+if TYPE_CHECKING:
+    from tortoise import Model
 
 
 class MysqlDDL(BaseDDL):
@@ -16,12 +23,27 @@ class MysqlDDL(BaseDDL):
     _RENAME_COLUMN_TEMPLATE = (
         "ALTER TABLE `{table_name}` RENAME COLUMN `{old_column_name}` TO `{new_column_name}`"
     )
-    _ADD_INDEX_TEMPLATE = (
-        "ALTER TABLE `{table_name}` ADD {unique}INDEX `{index_name}` ({column_names})"
-    )
+    _ADD_INDEX_TEMPLATE = "ALTER TABLE `{table_name}` ADD {index_type}{unique}INDEX `{index_name}` ({column_names}){extra}"
     _DROP_INDEX_TEMPLATE = "ALTER TABLE `{table_name}` DROP INDEX `{index_name}`"
     _ADD_FK_TEMPLATE = "ALTER TABLE `{table_name}` ADD CONSTRAINT `{fk_name}` FOREIGN KEY (`{db_column}`) REFERENCES `{table}` (`{field}`) ON DELETE {on_delete}"
     _DROP_FK_TEMPLATE = "ALTER TABLE `{table_name}` DROP FOREIGN KEY `{fk_name}`"
-    _M2M_TABLE_TEMPLATE = "CREATE TABLE `{table_name}` (`{backward_key}` {backward_type} NOT NULL REFERENCES `{backward_table}` (`{backward_field}`) ON DELETE CASCADE,`{forward_key}` {forward_type} NOT NULL REFERENCES `{forward_table}` (`{forward_field}`) ON DELETE CASCADE){extra}{comment}"
+    _M2M_TABLE_TEMPLATE = (
+        "CREATE TABLE `{table_name}` (\n"
+        "    `{backward_key}` {backward_type} NOT NULL REFERENCES `{backward_table}` (`{backward_field}`) ON DELETE CASCADE,\n"
+        "    `{forward_key}` {forward_type} NOT NULL REFERENCES `{forward_table}` (`{forward_field}`) ON DELETE CASCADE\n"
+        "){extra}{comment}"
+    )
     _MODIFY_COLUMN_TEMPLATE = "ALTER TABLE `{table_name}` MODIFY COLUMN {column}"
     _RENAME_TABLE_TEMPLATE = "ALTER TABLE `{old_table_name}` RENAME TO `{new_table_name}`"
+
+    def _index_name(self, unique: bool | None, model: type[Model], field_names: list[str]) -> str:
+        if unique:
+            if len(field_names) == 1:
+                # Example: `email = CharField(max_length=50, unique=True)`
+                # Generate schema: `"email" VARCHAR(10) NOT NULL UNIQUE`
+                # Unique index key is the same as field name: `email`
+                return field_names[0]
+            index_prefix = "uid"
+        else:
+            index_prefix = "idx"
+        return self.schema_generator._generate_index_name(index_prefix, model, field_names)

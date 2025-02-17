@@ -1,13 +1,112 @@
 # ChangeLog
 
-## 0.6
+## 0.8
 
-### 0.6.4
+### [0.8.2]**(Unreleased)**
+
+#### Added
+- feat: add --fake to upgrade/downgrade. ([#398])
+
+#### Fixed
+- fix: aerich migrate raises tortoise.exceptions.FieldError when `index.INDEX_TYPE` is not empty. ([#415])
+- fix: inspectdb raise KeyError 'int2' for smallint. ([#401])
+
+### Changed
+- Refactored version management to use `importlib.metadata.version(__package__)` instead of hardcoded version string ([#412])
+
+[#398]: https://github.com/tortoise/aerich/pull/398
+[#401]: https://github.com/tortoise/aerich/pull/401
+[#412]: https://github.com/tortoise/aerich/pull/412
+[#415]: https://github.com/tortoise/aerich/pull/415
+
+### [0.8.1](../../releases/tag/v0.8.1) - 2024-12-27
+
+#### Fixed
+- fix: add o2o field does not create constraint when migrating. ([#396])
+- Migration with duplicate renaming of columns in some cases. ([#395])
+- fix: intermediate table for m2m relation not created. ([#394])
+- Migrate add m2m field with custom through generate duplicated table. ([#393])
+- Migrate drop the wrong m2m field when model have multi m2m fields. ([#376])
+- KeyError raised when removing or renaming an existing model. ([#386])
+- fix: error when there is `__init__.py` in the migration folder. ([#272])
+- Setting null=false on m2m field causes migration to fail. ([#334])
+- Fix NonExistentKey when running `aerich init` without `[tool]` section in config file. ([#284])
+- Fix configuration file reading error when containing Chinese characters. ([#286])
+- sqlite: failed to create/drop index. ([#302])
+- PostgreSQL: Cannot drop constraint after deleting or rename FK on a model. ([#378])
+- Fix create/drop indexes in every migration. ([#377])
+- Sort m2m fields before comparing them with diff. ([#271])
+
+#### Changed
+- Allow run `aerich init-db` with empty migration directories instead of abort with warnings. ([#286])
+- Add version constraint(>=0.21) for tortoise-orm. ([#388])
+- Move `tomlkit` to optional and support `pip install aerich[toml]`. ([#392])
+
+[#396]: https://github.com/tortoise/aerich/pull/396
+[#395]: https://github.com/tortoise/aerich/pull/395
+[#394]: https://github.com/tortoise/aerich/pull/394
+[#393]: https://github.com/tortoise/aerich/pull/393
+[#392]: https://github.com/tortoise/aerich/pull/392
+[#388]: https://github.com/tortoise/aerich/pull/388
+[#386]: https://github.com/tortoise/aerich/pull/386
+[#378]: https://github.com/tortoise/aerich/pull/378
+[#377]: https://github.com/tortoise/aerich/pull/377
+[#376]: https://github.com/tortoise/aerich/pull/376
+[#334]: https://github.com/tortoise/aerich/pull/334
+[#302]: https://github.com/tortoise/aerich/pull/302
+[#286]: https://github.com/tortoise/aerich/pull/286
+[#284]: https://github.com/tortoise/aerich/pull/284
+[#272]: https://github.com/tortoise/aerich/pull/272
+[#271]: https://github.com/tortoise/aerich/pull/271
+
+### [0.8.0](../../releases/tag/v0.8.0) - 2024-12-04
+
+- Fix the issue of parameter concatenation when generating ORM with inspectdb (#331)
+- Fix KeyError when deleting a field with unqiue=True. (#364)
+- Correct the click import. (#360)
+- Improve CLI help text and output. (#355)
+- Fix mysql drop unique index raises OperationalError. (#346)
+
+  **Upgrade note:**
+    1. Use column name as unique key name for mysql
+    2. Drop support for Python3.7
+
+## 0.7
+
+### [0.7.2](../../releases/tag/v0.7.2) - 2023-07-20
+
+- Support virtual fields.
+- Fix modify multiple times. (#279)
+- Added `-i` and `--in-transaction` options to `aerich migrate` command. (#296)
+- Fix generates two semicolons in a row. (#301)
+
+### 0.7.1
+
+- Fix syntax error with python3.8.10. (#265)
+- Fix sql generate error. (#263)
+- Fix initialize an empty database. (#267)
+
+### 0.7.1rc1
+
+- Fix postgres sql error (#263)
+
+### 0.7.0
+
+**Now aerich use `.py` file to record versions.**
+
+Upgrade Note:
+
+1. Drop `aerich` table
+2. Delete `migrations/models` folder
+3. Run `aerich init-db`
 
 - Improve `inspectdb` adding support to `postgresql::numeric` data type
 - Add support for dynamically load DDL classes easing to add support to
   new databases without changing `Migrate` class logic
 - Fix decimal field change. (#246)
+- Support add/remove field with index.
+
+## 0.6
 
 ### 0.6.3
 

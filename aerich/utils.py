@@ -1,17 +1,21 @@
-import importlib
+from __future__ import annotations
+
+import importlib.util
 import os
 import re
 import sys
+from collections.abc import Generator
 from pathlib import Path
-from typing import Dict, Union
+from types import ModuleType
 
-from click import BadOptionUsage, ClickException, Context
+from asyncclick import BadOptionUsage, ClickException, Context
+from dictdiffer import diff
 from tortoise import BaseDBAsyncClient, Tortoise
 
 
 def add_src_path(path: str) -> str:
     """
-    add a folder to the paths so we can import from there
+    add a folder to the paths, so we can import from there
     :param path: path to add
     :return: absolute path
     """
@@ -33,20 +37,20 @@ def get_app_connection_name(config, app_name: str) -> str:
     :return:
     """
     app = config.get("apps").get(app_name)
-    if app:
-        return app.get("default_connection", "default")
-    raise BadOptionUsage(
-        option_name="--app",
-        message=f'Can\'t get app named "{app_name}"',
-    )
+    if not app:
+        raise BadOptionUsage(
+            option_name="--app",
+            message=f'Can\'t get app named "{app_name}"',
+        )
+    return app.get("default_connection", "default")
 
 
 def get_app_connection(config, app) -> BaseDBAsyncClient:
     """
-    get connection name
+    get connection client
     :param config:
     :param app:
-    :return:
+    :return: client instance
     """
     return Tortoise.get_connection(get_app_connection_name(config, app))
 
@@ -77,72 +81,66 @@ def get_tortoise_config(ctx: Context, tortoise_orm: str) -> dict:
     return config
 
 
-_UPGRADE = "-- upgrade --\n"
-_DOWNGRADE = "-- downgrade --\n"
-
-
-def get_version_content_from_file(version_file: Union[str, Path]) -> Dict:
-    """
-    get version content
-    :param version_file:
-    :return:
-    """
-    with open(version_file, "r", encoding="utf-8") as f:
-        content = f.read()
-        first = content.index(_UPGRADE)
-        try:
-            second = content.index(_DOWNGRADE)
-        except ValueError:
-            second = len(content) - 1
-        upgrade_content = content[first + len(_UPGRADE) : second].strip()  # noqa:E203
-        downgrade_content = content[second + len(_DOWNGRADE) :].strip()  # noqa:E203
-        ret = {
-            "upgrade": list(filter(lambda x: x or False, upgrade_content.split(";\n"))),
-            "downgrade": list(filter(lambda x: x or False, downgrade_content.split(";\n"))),
-        }
-        return ret
-
-
-def write_version_file(version_file: Path, content: Dict):
-    """
-    write version file
-    :param version_file:
-    :param content:
-    :return:
-    """
-    with open(version_file, "w", encoding="utf-8") as f:
-        f.write(_UPGRADE)
-        upgrade = content.get("upgrade")
-        if len(upgrade) > 1:
-            f.write(";\n".join(upgrade))
-            if not upgrade[-1].endswith(";"):
-                f.write(";\n")
-        else:
-            f.write(f"{upgrade[0]}")
-            if not upgrade[0].endswith(";"):
-                f.write(";")
-            f.write("\n")
-        downgrade = content.get("downgrade")
-        if downgrade:
-            f.write(_DOWNGRADE)
-            if len(downgrade) > 1:
-                f.write(";\n".join(downgrade) + ";\n")
-            else:
-                f.write(f"{downgrade[0]};\n")
-
-
-def get_models_describe(app: str) -> Dict:
+def get_models_describe(app: str) -> dict:
     """
     get app models describe
     :param app:
     :return:
     """
     ret = {}
-    for model in Tortoise.apps.get(app).values():
+    for model in Tortoise.apps[app].values():
         describe = model.describe()
         ret[describe.get("name")] = describe
     return ret
 
 
-def is_default_function(string: str):
+def is_default_function(string: str) -> re.Match | None:
     return re.match(r"^<function.+>$", str(string or ""))
+
+
+def import_py_file(file: str | Path) -> ModuleType:
+    module_name, file_ext = os.path.splitext(os.path.split(file)[-1])
+    spec = importlib.util.spec_from_file_location(module_name, file)
+    module = importlib.util.module_from_spec(spec)  # type:ignore[arg-type]
+    spec.loader.exec_module(module)  # type:ignore[union-attr]
+    return module
+
+
+def get_dict_diff_by_key(
+    old_fields: list[dict], new_fields: list[dict], key="through"
+) -> Generator[tuple]:
+    """
+    Compare two list by key instead of by index
+
+    :param old_fields: previous field info list
+    :param new_fields: current field info list
+    :param key: if two dicts have the same value of this key, action is change; otherwise, is remove/add
+    :return: similar to dictdiffer.diff
+
+    Example::
+
+        >>> old = [{'through': 'a'}, {'through': 'b'}, {'through': 'c'}]
+        >>> new = [{'through': 'a'}, {'through': 'c'}]  # remove the second element
+        >>> list(diff(old, new))
+        [('change', [1, 'through'], ('b', 'c')),
+         ('remove', '', [(2, {'through': 'c'})])]
+        >>> list(get_dict_diff_by_key(old, new))
+        [('remove', '', [(0, {'through': 'b'})])]
+
+    """
+    length_old, length_new = len(old_fields), len(new_fields)
+    if length_old == 0 or length_new == 0 or length_old == length_new == 1:
+        yield from diff(old_fields, new_fields)
+    else:
+        value_index: dict[str, int] = {f[key]: i for i, f in enumerate(new_fields)}
+        additions = set(range(length_new))
+        for field in old_fields:
+            value = field[key]
+            if (index := value_index.get(value)) is not None:
+                additions.remove(index)
+                yield from diff([field], [new_fields[index]])  # change
+            else:
+                yield from diff([field], [])  # remove
+        if additions:
+            for index in sorted(additions):
+                yield from diff([], [new_fields[index]])  # add
